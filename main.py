@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import logging
+import re
 import httpx
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -34,7 +35,7 @@ AI_MODEL     = os.getenv("AI_MODEL", "claude-fable-5")
 if API_KEY:
     logger.info(f"API Key загружен. Модель: {AI_MODEL}")
 else:
-    logger.warning("API_KEY не найден в переменных окружения!")
+    logger.warning("API_KEY не найден!")
 
 DEFAULT_PROMPT_FILENAME = "master_prompt.txt"
 
@@ -45,7 +46,6 @@ DEFAULT_PROMPT_FILENAME = "master_prompt.txt"
 def load_system_prompt() -> str:
     env_prompt = os.getenv("SYSTEM_PROMPT", "").strip()
     if env_prompt:
-        logger.info("Промпт загружен из env SYSTEM_PROMPT.")
         return env_prompt
 
     prompt_path = os.path.join(os.path.dirname(__file__), DEFAULT_PROMPT_FILENAME)
@@ -53,18 +53,19 @@ def load_system_prompt() -> str:
         try:
             content = open(prompt_path, encoding="utf-8").read().strip()
             if content:
-                logger.info(f"Промпт загружен из {DEFAULT_PROMPT_FILENAME}.")
                 return content
         except Exception as e:
-            logger.error(f"Ошибка чтения {DEFAULT_PROMPT_FILENAME}: {e}")
+            logger.error(f"Ошибка чтения промпта: {e}")
 
-    logger.warning("Используется встроенный резервный промпт.")
     return """Ты — профессиональный трейдинговый ИИ-аналитик NEZZX SIGNALS.
 Специализируешься на криптовалютных сигналах и техническом анализе.
 
-ВАЖНО: Отвечай ТОЛЬКО в формате JSON. Никакого текста до или после JSON. Никаких markdown блоков.
+Тебе передаются РЕАЛЬНЫЕ рыночные данные с Binance (цена, свечи 1D/4H/1H, RSI, объёмы, уровни).
+Используй эти данные для точного анализа. НЕ проси пользователя предоставить данные — они уже есть.
 
-Когда пользователь просит сигнал или анализ по коину:
+ВАЖНО: Отвечай ТОЛЬКО в формате JSON. Никакого текста до или после. Никаких markdown блоков.
+
+Когда пользователь просит сигнал или анализ:
 {
   "type": "signal",
   "coin": "BTC",
@@ -87,23 +88,198 @@ def load_system_prompt() -> str:
     "Объём растёт на зелёных свечах",
     "Паттерн бычьего флага на 4H"
   ],
-  "summary": "Краткое объяснение почему именно этот сигнал"
+  "summary": "Краткое объяснение сигнала"
 }
 
-Если вопрос общий (не о сигнале):
+Если вопрос общий:
 {
   "type": "text",
-  "message": "Твой ответ здесь по-русски"
+  "message": "Твой ответ по-русски"
 }
 
 ПРАВИЛА:
 - direction только LONG или SHORT
-- confidence от 60 до 92 (реалистично)
-- Используй реалистичные цены для монеты
-- reasons: 4-5 конкретных технических причин по-русски
+- confidence от 60 до 92
+- Цены берёшь из реальных данных которые тебе переданы
+- reasons: 4-5 технических причин основанных на реальных данных
 - Все цифры без знака $ в полях entry/stop_loss/take_profit
-- Отвечай по-русски
-- Только чистый JSON, без обёртки"""
+- Только чистый JSON без обёртки
+- Отвечай по-русски"""
+
+# ==============================================================================
+# BINANCE — ПОЛУЧЕНИЕ РЫНОЧНЫХ ДАННЫХ
+# ==============================================================================
+
+KNOWN_COINS = [
+    "BTC","ETH","SOL","LTC","BNB","XRP","ADA","DOGE",
+    "AVAX","DOT","LINK","MATIC","UNI","ATOM","FIL",
+    "NEAR","APT","ARB","OP","INJ","SUI","TRX","TON",
+    "PEPE","WIF","BONK","JUP","SEI","TIA","PYTH","JTO",
+    "MANTA","ALT","PIXEL","PORTAL","DYM","STRK","ZETA"
+]
+
+def extract_symbol(text: str) -> Optional[str]:
+    """Извлекает символ монеты из текста пользователя"""
+    text_up = text.upper()
+    for coin in KNOWN_COINS:
+        pattern = r'\b' + coin + r'\b'
+        if re.search(pattern, text_up):
+            return coin
+    return None
+
+def calculate_rsi(closes: list, period: int = 14) -> float:
+    """Считает RSI по списку цен закрытия"""
+    if len(closes) < period + 1:
+        return 50.0
+    deltas    = [closes[i+1] - closes[i] for i in range(len(closes)-1)]
+    gains     = [d for d in deltas if d > 0]
+    losses    = [-d for d in deltas if d < 0]
+    avg_gain  = sum(gains[-period:]) / period if gains else 0
+    avg_loss  = sum(losses[-period:]) / period if losses else 0
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100 - (100 / (1 + rs)), 2)
+
+def calculate_ema(closes: list, period: int) -> float:
+    """Считает EMA"""
+    if len(closes) < period:
+        return closes[-1] if closes else 0
+    k   = 2 / (period + 1)
+    ema = sum(closes[:period]) / period
+    for price in closes[period:]:
+        ema = price * k + ema * (1 - k)
+    return round(ema, 4)
+
+async def get_market_data(symbol: str) -> dict:
+    """
+    Получает реальные данные с Binance:
+    цена, свечи 1D/4H/1H, RSI, EMA, объёмы, уровни
+    """
+    clean = symbol.upper().replace("/","").replace("-","")
+    if not clean.endswith("USDT"):
+        clean += "USDT"
+
+    base = "https://api.binance.com/api/v3"
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # 24h тикер
+        ticker_r = await client.get(
+            f"{base}/ticker/24hr",
+            params={"symbol": clean}
+        )
+        ticker_r.raise_for_status()
+        ticker = ticker_r.json()
+
+        # Свечи по таймфреймам
+        candles = {}
+        for tf in ["1d", "4h", "1h"]:
+            r = await client.get(
+                f"{base}/klines",
+                params={"symbol": clean, "interval": tf, "limit": 50}
+            )
+            r.raise_for_status()
+            raw = r.json()
+            candles[tf] = [{
+                "open":   float(c[1]),
+                "high":   float(c[2]),
+                "low":    float(c[3]),
+                "close":  float(c[4]),
+                "volume": float(c[5])
+            } for c in raw]
+
+    # RSI
+    closes_1h = [c["close"] for c in candles["1h"]]
+    closes_4h = [c["close"] for c in candles["4h"]]
+    closes_1d = [c["close"] for c in candles["1d"]]
+    rsi_1h    = calculate_rsi(closes_1h)
+    rsi_4h    = calculate_rsi(closes_4h)
+
+    # EMA
+    ema20_1h = calculate_ema(closes_1h, 20)
+    ema50_1h = calculate_ema(closes_1h, 50)
+    ema20_4h = calculate_ema(closes_4h, 20)
+    ema50_4h = calculate_ema(closes_4h, 50)
+
+    # Уровни поддержки/сопротивления
+    highs_1d = [c["high"] for c in candles["1d"][-20:]]
+    lows_1d  = [c["low"]  for c in candles["1d"][-20:]]
+    highs_4h = [c["high"] for c in candles["4h"][-20:]]
+    lows_4h  = [c["low"]  for c in candles["4h"][-20:]]
+
+    current_price = float(ticker["lastPrice"])
+
+    return {
+        "symbol":       clean,
+        "price":        current_price,
+        "change_24h":   float(ticker["priceChangePercent"]),
+        "volume_24h":   float(ticker["quoteVolume"]),
+        "high_24h":     float(ticker["highPrice"]),
+        "low_24h":      float(ticker["lowPrice"]),
+        "rsi_1h":       rsi_1h,
+        "rsi_4h":       rsi_4h,
+        "ema20_1h":     ema20_1h,
+        "ema50_1h":     ema50_1h,
+        "ema20_4h":     ema20_4h,
+        "ema50_4h":     ema50_4h,
+        "resistance_1d": round(max(highs_1d), 4),
+        "support_1d":    round(min(lows_1d), 4),
+        "resistance_4h": round(max(highs_4h), 4),
+        "support_4h":    round(min(lows_4h), 4),
+        "candles_1d":   candles["1d"][-10:],
+        "candles_4h":   candles["4h"][-20:],
+        "candles_1h":   candles["1h"][-24:],
+    }
+
+def format_market_context(md: dict) -> str:
+    """Форматирует рыночные данные в текст для промпта"""
+    candles_1d_str = "\n".join([
+        f"  O:{c['open']} H:{c['high']} L:{c['low']} C:{c['close']} V:{c['volume']:.0f}"
+        for c in md["candles_1d"]
+    ])
+    candles_4h_str = "\n".join([
+        f"  O:{c['open']} H:{c['high']} L:{c['low']} C:{c['close']}"
+        for c in md["candles_4h"]
+    ])
+    candles_1h_str = "\n".join([
+        f"  O:{c['open']} H:{c['high']} L:{c['low']} C:{c['close']}"
+        for c in md["candles_1h"]
+    ])
+
+    return f"""
+=== РЕАЛЬНЫЕ РЫНОЧНЫЕ ДАННЫЕ ({md['symbol']}) ===
+Текущая цена:      ${md['price']}
+Изменение 24h:     {md['change_24h']}%
+Объём 24h:         ${md['volume_24h']:,.0f}
+Максимум 24h:      ${md['high_24h']}
+Минимум 24h:       ${md['low_24h']}
+
+--- ИНДИКАТОРЫ ---
+RSI 1H:            {md['rsi_1h']}
+RSI 4H:            {md['rsi_4h']}
+EMA20 1H:          {md['ema20_1h']}
+EMA50 1H:          {md['ema50_1h']}
+EMA20 4H:          {md['ema20_4h']}
+EMA50 4H:          {md['ema50_4h']}
+
+--- УРОВНИ ---
+Сопротивление 1D:  ${md['resistance_1d']}
+Поддержка 1D:      ${md['support_1d']}
+Сопротивление 4H:  ${md['resistance_4h']}
+Поддержка 4H:      ${md['support_4h']}
+
+--- СВЕЧИ 1D (последние 10) ---
+{candles_1d_str}
+
+--- СВЕЧИ 4H (последние 20) ---
+{candles_4h_str}
+
+--- СВЕЧИ 1H (последние 24) ---
+{candles_1h_str}
+=== КОНЕЦ ДАННЫХ ===
+
+Проанализируй эти реальные данные и сформируй точный сигнал.
+"""
 
 # ==============================================================================
 # PYDANTIC МОДЕЛИ
@@ -119,31 +295,6 @@ class ChatRequest(BaseModel):
             raise ValueError("Сообщение не может быть пустым")
         return v
 
-class AnalysisRequest(BaseModel):
-    symbol: str = Field(..., example="BTCUSDT")
-    timeframe: str = Field("4h", example="4h")
-    current_price: Optional[float] = Field(None, example=65000.0)
-    notes: Optional[str] = Field("", example="Найди FVG и ближайший Order Block")
-    mode: Optional[str] = Field("full", example="full")
-
-    @validator("symbol")
-    def sanitize_symbol(cls, v):
-        v = v.strip().upper()
-        if not v:
-            raise ValueError("Символ не может быть пустым")
-        return v
-
-class DealEvaluationRequest(BaseModel):
-    symbol: str = Field(..., example="BTCUSDT")
-    entry_price: float = Field(..., example=64200.0)
-    stop_loss: float = Field(..., example=63500.0)
-    take_profit: float = Field(..., example=66500.0)
-    direction: str = Field(..., example="LONG")
-    rationale: str = Field("", example="Вход от бычьего Order Block после CHoCH")
-
-class TermExplanationRequest(BaseModel):
-    term: str = Field(..., example="Fair Value Gap")
-
 class StandardResponse(BaseModel):
     status: str
     symbol: Optional[str] = None
@@ -157,14 +308,13 @@ class StandardResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("NEZZX Signals Server запускается...")
-    logger.info(f"Модель: {AI_MODEL} | Base URL: {API_BASE_URL}")
+    logger.info(f"Модель: {AI_MODEL} | Base: {API_BASE_URL}")
     yield
     logger.info("NEZZX Signals Server останавливается...")
 
 app = FastAPI(
-    title="NEZZX Signals — Trading AI Backend",
-    description="FastAPI backend для криптосигналов на базе Claude Fable 5",
-    version="3.0.0",
+    title="NEZZX Signals",
+    version="3.1.0",
     lifespan=lifespan
 )
 
@@ -177,30 +327,30 @@ app.add_middleware(
 )
 
 @app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
-    start = time.time()
+async def process_time(request: Request, call_next):
+    start    = time.time()
     response = await call_next(request)
-    response.headers["X-Process-Time"] = f"{time.time() - start:.3f}s"
+    response.headers["X-Process-Time"] = f"{time.time()-start:.3f}s"
     return response
 
 # ==============================================================================
-# ЯДРО: ЗАПРОС К AI
+# ЗАПРОС К AI
 # ==============================================================================
 
 async def query_ai(user_message: str, max_tokens: int = 1200) -> str:
     if not API_KEY:
         raise HTTPException(
-            status_code=Status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="API_KEY не установлен в Environment Variables на Render."
+            status_code=500,
+            detail="API_KEY не установлен в Environment Variables."
         )
 
     headers = {
-        "Content-Type": "application/json",
+        "Content-Type":  "application/json",
         "Authorization": f"Bearer {API_KEY}"
     }
 
     payload = {
-        "model": AI_MODEL,
+        "model":      AI_MODEL,
         "max_tokens": max_tokens,
         "messages": [
             {"role": "system", "content": load_system_prompt()},
@@ -210,44 +360,29 @@ async def query_ai(user_message: str, max_tokens: int = 1200) -> str:
 
     try:
         async with httpx.AsyncClient(timeout=90.0) as client:
-            logger.info(f"Запрос к {AI_MODEL} через {API_BASE_URL}")
+            logger.info(f"Запрос к {AI_MODEL}")
             resp = await client.post(
                 f"{API_BASE_URL}/chat/completions",
                 headers=headers,
                 json=payload
             )
-
             if resp.status_code != 200:
-                logger.error(f"AI API вернул {resp.status_code}: {resp.text}")
+                logger.error(f"AI API {resp.status_code}: {resp.text}")
                 raise HTTPException(
-                    status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=503,
                     detail=f"AI ошибка {resp.status_code}: {resp.text[:200]}"
                 )
-
             data = resp.json()
             text = data["choices"][0]["message"]["content"]
-
             if not text:
-                raise HTTPException(
-                    status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="AI вернул пустой ответ."
-                )
-
-            logger.info(f"Ответ получен. Длина: {len(text)} символов.")
+                raise HTTPException(status_code=503, detail="AI вернул пустой ответ.")
+            logger.info(f"Ответ получен, длина: {len(text)} символов")
             return text
 
     except httpx.TimeoutException:
-        logger.error("Таймаут запроса к AI API (90s).")
-        raise HTTPException(
-            status_code=Status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Превышено время ожидания ответа от AI."
-        )
+        raise HTTPException(status_code=504, detail="Таймаут запроса к AI.")
     except httpx.RequestError as e:
-        logger.error(f"Сетевая ошибка: {e}")
-        raise HTTPException(
-            status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Сетевая ошибка: {str(e)}"
-        )
+        raise HTTPException(status_code=503, detail=f"Сетевая ошибка: {str(e)}")
 
 # ==============================================================================
 # ЭНДПОИНТЫ
@@ -265,9 +400,9 @@ async def serve_frontend():
         content="""
         <html>
         <body style="font-family:monospace;background:#000;color:#e0e0e0;padding:30px">
-          <h2 style="color:#ff0000">🔴 NEZZX SIGNALS — Server Running</h2>
-          <p>Файл <code>index.html</code> не найден.</p>
-          <p><a href="/docs" style="color:#ff6666">→ API Документация</a></p>
+          <h2 style="color:#ff0000">NEZZX SIGNALS — Running</h2>
+          <p>index.html не найден.</p>
+          <a href="/docs" style="color:#ff6666">API Docs</a>
         </body>
         </html>
         """,
@@ -277,80 +412,47 @@ async def serve_frontend():
 @app.get("/api/health")
 async def health_check():
     return {
-        "status": "healthy",
+        "status":      "healthy",
         "api_key_set": bool(API_KEY),
-        "model": AI_MODEL,
-        "base_url": API_BASE_URL,
-        "timestamp": time.time()
+        "model":       AI_MODEL,
+        "base_url":    API_BASE_URL,
+        "timestamp":   time.time()
     }
 
 @app.post("/api/chat")
 async def chat_endpoint(data: ChatRequest):
+    user_msg       = data.message
+    market_context = ""
+    found_symbol   = None
+
+    # Ищем монету в запросе
+    symbol = extract_symbol(user_msg)
+
+    if symbol:
+        try:
+            logger.info(f"Получаем данные Binance для {symbol}...")
+            md             = await get_market_data(symbol)
+            market_context = format_market_context(md)
+            found_symbol   = md["symbol"]
+            logger.info(f"Данные получены: {found_symbol} @ ${md['price']}")
+        except Exception as e:
+            logger.warning(f"Не удалось получить данные для {symbol}: {e}")
+            market_context = f"\n[Binance данные недоступны для {symbol}, делай анализ на основе общих знаний]\n"
+
+    # Собираем финальный промпт
+    full_prompt = f"{market_context}\nЗапрос пользователя: {user_msg}"
+
     raw_response = await query_ai(
-        user_message=data.message,
+        user_message=full_prompt,
         max_tokens=1200
     )
+
     return {
-        "status": "success",
-        "response": raw_response,
+        "status":    "success",
+        "response":  raw_response,
+        "symbol":    found_symbol,
         "timestamp": time.time()
     }
-
-@app.post("/api/analyze", response_model=StandardResponse)
-async def analyze_market(data: AnalysisRequest):
-    prompt = f"Проведи технический анализ фьючерсной пары {data.symbol}."
-    prompt += f"\n- Таймфрейм: {data.timeframe}"
-    if data.current_price:
-        prompt += f"\n- Текущая цена: ${data.current_price}"
-    if data.notes:
-        prompt += f"\n- Вопросы пользователя: {data.notes}"
-    if data.mode == "short":
-        prompt += "\n\nОтвечай кратко, по сигнальному шаблону."
-
-    result = await query_ai(prompt, max_tokens=1500)
-    return StandardResponse(
-        status="success",
-        symbol=data.symbol,
-        analysis=result,
-        timestamp=time.time()
-    )
-
-@app.post("/api/evaluate-deal", response_model=StandardResponse)
-async def evaluate_deal(data: DealEvaluationRequest):
-    risk   = abs(data.entry_price - data.stop_loss)
-    reward = abs(data.take_profit - data.entry_price)
-    rr     = round(reward / risk, 2) if risk > 0 else 0
-
-    prompt = f"""Оцени торговую сделку:
-- Инструмент: {data.symbol} ({data.direction})
-- Вход: {data.entry_price} | Стоп: {data.stop_loss} | Тейк: {data.take_profit}
-- Risk/Reward: 1:{rr}
-- Логика трейдера: {data.rationale}
-
-Дай разбор: что правильно, слабые места, конкретные рекомендации."""
-
-    result = await query_ai(prompt, max_tokens=1000)
-    return StandardResponse(
-        status="success",
-        symbol=data.symbol,
-        analysis=result,
-        timestamp=time.time()
-    )
-
-@app.post("/api/explain-term", response_model=StandardResponse)
-async def explain_term(data: TermExplanationRequest):
-    prompt = (
-        f"Объясни термин '{data.term}': "
-        f"определение, аналогию из жизни, как выглядит на графике, "
-        f"как применять в торговле."
-    )
-    result = await query_ai(prompt, max_tokens=800)
-    return StandardResponse(
-        status="success",
-        symbol=data.term,
-        analysis=result,
-        timestamp=time.time()
-    )
 
 # ==============================================================================
 # ОБРАБОТЧИКИ ОШИБОК
@@ -360,7 +462,7 @@ async def explain_term(data: TermExplanationRequest):
 async def http_exc_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
-        content={"status": "error", "detail": exc.detail, "timestamp": time.time()}
+        content={"status":"error","detail":exc.detail,"timestamp":time.time()}
     )
 
 @app.exception_handler(Exception)
@@ -368,7 +470,7 @@ async def global_exc_handler(request: Request, exc: Exception):
     logger.error(f"Необработанная ошибка: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"status": "error", "detail": "Внутренняя ошибка сервера.", "timestamp": time.time()}
+        content={"status":"error","detail":"Внутренняя ошибка сервера.","timestamp":time.time()}
     )
 
 # ==============================================================================
