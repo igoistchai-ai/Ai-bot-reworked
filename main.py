@@ -27,31 +27,25 @@ logger = logging.getLogger("NezzxSignals")
 # КОНФИГУРАЦИЯ
 # ==============================================================================
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-CLAUDE_MODEL      = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5")  # можно менять через env
+API_KEY      = os.getenv("API_KEY", "")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://riskradarai.ru/v1")
+AI_MODEL     = os.getenv("AI_MODEL", "claude-fable-5")
 
-if ANTHROPIC_API_KEY:
-    logger.info("Anthropic API key загружен успешно.")
+if API_KEY:
+    logger.info(f"API Key загружен. Модель: {AI_MODEL}")
 else:
-    logger.warning("ANTHROPIC_API_KEY не найден в переменных окружения!")
+    logger.warning("API_KEY не найден в переменных окружения!")
 
 DEFAULT_PROMPT_FILENAME = "master_prompt.txt"
 
 # ==============================================================================
-# ЗАГРУЗКА СИСТЕМНОГО ПРОМПТА
+# СИСТЕМНЫЙ ПРОМПТ
 # ==============================================================================
 
 def load_system_prompt() -> str:
-    """
-    Приоритет:
-    1. Переменная окружения SYSTEM_PROMPT
-    2. Файл master_prompt.txt рядом с main.py
-    3. Встроенный резервный промпт
-    """
     env_prompt = os.getenv("SYSTEM_PROMPT", "").strip()
     if env_prompt:
-        logger.info("Системный промпт загружен из env SYSTEM_PROMPT.")
+        logger.info("Промпт загружен из env SYSTEM_PROMPT.")
         return env_prompt
 
     prompt_path = os.path.join(os.path.dirname(__file__), DEFAULT_PROMPT_FILENAME)
@@ -59,7 +53,7 @@ def load_system_prompt() -> str:
         try:
             content = open(prompt_path, encoding="utf-8").read().strip()
             if content:
-                logger.info(f"Системный промпт загружен из {DEFAULT_PROMPT_FILENAME}.")
+                logger.info(f"Промпт загружен из {DEFAULT_PROMPT_FILENAME}.")
                 return content
         except Exception as e:
             logger.error(f"Ошибка чтения {DEFAULT_PROMPT_FILENAME}: {e}")
@@ -68,7 +62,7 @@ def load_system_prompt() -> str:
     return """Ты — профессиональный трейдинговый ИИ-аналитик NEZZX SIGNALS.
 Специализируешься на криптовалютных сигналах и техническом анализе.
 
-ВАЖНО: Отвечай ТОЛЬКО в формате JSON. Никакого текста до или после JSON.
+ВАЖНО: Отвечай ТОЛЬКО в формате JSON. Никакого текста до или после JSON. Никаких markdown блоков.
 
 Когда пользователь просит сигнал или анализ по коину:
 {
@@ -163,13 +157,13 @@ class StandardResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("NEZZX Signals Server запускается...")
-    logger.info(f"Модель Claude: {CLAUDE_MODEL}")
+    logger.info(f"Модель: {AI_MODEL} | Base URL: {API_BASE_URL}")
     yield
     logger.info("NEZZX Signals Server останавливается...")
 
 app = FastAPI(
     title="NEZZX Signals — Trading AI Backend",
-    description="FastAPI backend + Claude Anthropic API для криптосигналов",
+    description="FastAPI backend для криптосигналов на базе Claude Fable 5",
     version="3.0.0",
     lifespan=lifespan
 )
@@ -190,78 +184,66 @@ async def add_process_time_header(request: Request, call_next):
     return response
 
 # ==============================================================================
-# ЯДРО: ЗАПРОС К CLAUDE API
+# ЯДРО: ЗАПРОС К AI
 # ==============================================================================
 
-async def query_claude(
-    user_message: str,
-    system_prompt: Optional[str] = None,
-    max_tokens: int = 1500,
-    temperature: float = 0.7
-) -> str:
-    """
-    Асинхронный запрос к Anthropic Claude API через httpx.
-    Возвращает текст ответа или бросает HTTPException.
-    """
-    if not ANTHROPIC_API_KEY:
+async def query_ai(user_message: str, max_tokens: int = 1200) -> str:
+    if not API_KEY:
         raise HTTPException(
             status_code=Status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="ANTHROPIC_API_KEY не установлен в Environment Variables на Render."
+            detail="API_KEY не установлен в Environment Variables на Render."
         )
-
-    system = system_prompt or load_system_prompt()
 
     headers = {
         "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        "Authorization": f"Bearer {API_KEY}"
     }
 
     payload = {
-        "model": CLAUDE_MODEL,
+        "model": AI_MODEL,
         "max_tokens": max_tokens,
-        "system": system,
         "messages": [
-            {"role": "user", "content": user_message}
+            {"role": "system", "content": load_system_prompt()},
+            {"role": "user",   "content": user_message}
         ]
     }
 
     try:
         async with httpx.AsyncClient(timeout=90.0) as client:
-            logger.info(f"Запрос к Claude ({CLAUDE_MODEL}), токены: {max_tokens}")
-            resp = await client.post(ANTHROPIC_API_URL, headers=headers, json=payload)
+            logger.info(f"Запрос к {AI_MODEL} через {API_BASE_URL}")
+            resp = await client.post(
+                f"{API_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload
+            )
 
             if resp.status_code != 200:
-                err_body = resp.text
-                logger.error(f"Claude API вернул {resp.status_code}: {err_body}")
+                logger.error(f"AI API вернул {resp.status_code}: {resp.text}")
                 raise HTTPException(
                     status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=f"Claude API ошибка {resp.status_code}: {err_body[:200]}"
+                    detail=f"AI ошибка {resp.status_code}: {resp.text[:200]}"
                 )
 
             data = resp.json()
-            text = "".join(
-                block.get("text", "")
-                for block in data.get("content", [])
-                if block.get("type") == "text"
-            )
+            text = data["choices"][0]["message"]["content"]
+
             if not text:
                 raise HTTPException(
                     status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Claude вернул пустой ответ."
+                    detail="AI вернул пустой ответ."
                 )
 
-            logger.info(f"Claude ответил успешно. Длина: {len(text)} символов.")
+            logger.info(f"Ответ получен. Длина: {len(text)} символов.")
             return text
 
     except httpx.TimeoutException:
-        logger.error("Таймаут запроса к Claude API (90s).")
+        logger.error("Таймаут запроса к AI API (90s).")
         raise HTTPException(
             status_code=Status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Превышено время ожидания ответа от Claude API."
+            detail="Превышено время ожидания ответа от AI."
         )
     except httpx.RequestError as e:
-        logger.error(f"Ошибка сети при запросе к Claude: {e}")
+        logger.error(f"Сетевая ошибка: {e}")
         raise HTTPException(
             status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Сетевая ошибка: {str(e)}"
@@ -273,7 +255,6 @@ async def query_claude(
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
-    """Отдаёт index.html если он есть рядом с main.py"""
     index_path = os.path.join(os.path.dirname(__file__), "index.html")
     if os.path.exists(index_path):
         return HTMLResponse(
@@ -286,7 +267,6 @@ async def serve_frontend():
         <body style="font-family:monospace;background:#000;color:#e0e0e0;padding:30px">
           <h2 style="color:#ff0000">🔴 NEZZX SIGNALS — Server Running</h2>
           <p>Файл <code>index.html</code> не найден.</p>
-          <p>Положи его рядом с <code>main.py</code>.</p>
           <p><a href="/docs" style="color:#ff6666">→ API Документация</a></p>
         </body>
         </html>
@@ -296,25 +276,19 @@ async def serve_frontend():
 
 @app.get("/api/health")
 async def health_check():
-    """Проверка состояния сервера"""
     return {
         "status": "healthy",
-        "anthropic_key_set": bool(ANTHROPIC_API_KEY),
-        "claude_model": CLAUDE_MODEL,
-        "prompt_loaded": bool(load_system_prompt()),
+        "api_key_set": bool(API_KEY),
+        "model": AI_MODEL,
+        "base_url": API_BASE_URL,
         "timestamp": time.time()
     }
 
 @app.post("/api/chat")
 async def chat_endpoint(data: ChatRequest):
-    """
-    Основной чат-эндпоинт для фронтенда.
-    Возвращает сырой текст Claude (JSON или текст).
-    """
-    raw_response = await query_claude(
+    raw_response = await query_ai(
         user_message=data.message,
-        max_tokens=1200,
-        temperature=0.7
+        max_tokens=1200
     )
     return {
         "status": "success",
@@ -324,8 +298,7 @@ async def chat_endpoint(data: ChatRequest):
 
 @app.post("/api/analyze", response_model=StandardResponse)
 async def analyze_market(data: AnalysisRequest):
-    """Детальный технический анализ по символу"""
-    prompt = f"Проведи технический и стратегический анализ фьючерсной пары {data.symbol}."
+    prompt = f"Проведи технический анализ фьючерсной пары {data.symbol}."
     prompt += f"\n- Таймфрейм: {data.timeframe}"
     if data.current_price:
         prompt += f"\n- Текущая цена: ${data.current_price}"
@@ -334,7 +307,7 @@ async def analyze_market(data: AnalysisRequest):
     if data.mode == "short":
         prompt += "\n\nОтвечай кратко, по сигнальному шаблону."
 
-    result = await query_claude(prompt, max_tokens=1500)
+    result = await query_ai(prompt, max_tokens=1500)
     return StandardResponse(
         status="success",
         symbol=data.symbol,
@@ -344,7 +317,6 @@ async def analyze_market(data: AnalysisRequest):
 
 @app.post("/api/evaluate-deal", response_model=StandardResponse)
 async def evaluate_deal(data: DealEvaluationRequest):
-    """Оценка сделки пользователя"""
     risk   = abs(data.entry_price - data.stop_loss)
     reward = abs(data.take_profit - data.entry_price)
     rr     = round(reward / risk, 2) if risk > 0 else 0
@@ -357,7 +329,7 @@ async def evaluate_deal(data: DealEvaluationRequest):
 
 Дай разбор: что правильно, слабые места, конкретные рекомендации."""
 
-    result = await query_claude(prompt, max_tokens=1000)
+    result = await query_ai(prompt, max_tokens=1000)
     return StandardResponse(
         status="success",
         symbol=data.symbol,
@@ -367,13 +339,12 @@ async def evaluate_deal(data: DealEvaluationRequest):
 
 @app.post("/api/explain-term", response_model=StandardResponse)
 async def explain_term(data: TermExplanationRequest):
-    """Объяснение торгового термина"""
     prompt = (
         f"Объясни термин '{data.term}': "
         f"определение, аналогию из жизни, как выглядит на графике, "
         f"как применять в торговле."
     )
-    result = await query_claude(prompt, max_tokens=800)
+    result = await query_ai(prompt, max_tokens=800)
     return StandardResponse(
         status="success",
         symbol=data.term,
