@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Crypto Terminal Pro | Live Market Analysis & Signals</title>
+    
+    <!-- Lightweight Charts CDN -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-primary: #0a0d14;
+            --bg-secondary: #121824;
+            --bg-card: #182030;
+            --bg-hover: #202b40;
+            --border-color: #232f48;
+            --border-focus: #3b82f6;
+            
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            
+            --accent-green: #00f090;
+            --accent-green-glow: rgba(0, 240, 144, 0.25);
+            --accent-red: #ff3860;
+            --accent-red-glow: rgba(255, 56, 96, 0.25);
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-gold: #f59e0b;
+            
+            --sidebar-width: 280px;
+            --panel-width: 380px;
+            --header-height: 64px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Monospace font for digits */
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-dim);
+        }
+
+        /* Header */
+        header {
+            height: var(--header-height);
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 10;
+        }
+
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 800;
+            font-size: 1.25rem;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #00f090, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-logo i {
+            -webkit-text-fill-color: initial;
+            color: var(--accent-green);
+            font-size: 1.4rem;
+        }
+
+        .ticker-bar {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            overflow-x: auto;
+            padding: 0 15px;
+        }
+
+        .ticker-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .ticker-item:hover, .ticker-item.active {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+        }
+
+        .ticker-symbol {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .ticker-price {
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            padding: 6px 12px;
+            border-radius: 20px;
+            background: rgba(0, 240, 144, 0.1);
+            color: var(--accent-green);
+            border: 1px solid rgba(0, 240, 144, 0.3);
+            font-weight: 600;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        /* App Layout */
+        .app-container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - var(--header-height));
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Left Toolbar & Selectors */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            font-weight: 700;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        select, input {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            outline: none;
+            transition: all 0.2s ease;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        /* Drawing Toolbar */
+        .drawing-tools {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .tool-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 10px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tool-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-main);
+            border-color: var(--text-dim);
+        }
+
+        .tool-btn.active {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        /* Indicator Switches */
+        .indicator-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toggle-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-card);
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 36px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--border-color);
+            transition: .3s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--accent-blue);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(16px);
+        }
+
+        /* Action AI Button */
+        .btn-ai-analyze {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+            transition: all 0.25s ease;
+            margin-top: auto;
+        }
+
+        .btn-ai-analyze:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+            filter: brightness(1.1);
+        }
+
+        .btn-ai-analyze:active {
+            transform: translateY(0);
+        }
+
+        /* Center Main Chart Zone */
+        .chart-workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: var(--bg-primary);
+        }
+
+        .chart-header {
+            padding: 12px 20px;
+            background: rgba(18, 24, 36, 0.6);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .pair-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .pair-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .timeframe-picker {
+            display: flex;
+            gap: 4px;
+            background: var(--bg-card);
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .tf-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tf-btn:hover {
+            color: var(--text-main);
+        }
+
+        .tf-btn.active {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        /* Chart Canvas Area */
+        .chart-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        #tv_chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Canvas Overlay for Drawings */
+        #drawing_overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        #drawing_overlay.interactive {
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+
+        /* Right Panel: AI Signals & Deep Analysis */
+        .analysis-panel {
+            width: var(--panel-width);
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .panel-header {
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .signal-hero {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 70%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .signal-badge-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .signal-type {
+            font-size: 1.6rem;
+            font-weight: 900;
+            padding: 6px 16px;
+            border-radius: 8px;
+            letter-spacing: 1px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .signal-type.long {
+            background: var(--accent-green-glow);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+            box-shadow: 0 0 15px var(--accent-green-glow);
+        }
+
+        .signal-type.short {
+            background: var(--accent-red-glow);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+            box-shadow: 0 0 15px var(--accent-red-glow);
+        }
+
+        .signal-type.neutral {
+            background: rgba(148, 163, 184, 0.1);
+            color: var(--text-muted);
+            border: 1px solid var(--text-dim);
+        }
+
+        .confidence-meter {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: flex-end;
+        }
+
+        .confidence-val {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: var(--accent-gold);
+        }
+
+        .confidence-bar {
+            width: 100px;
+            height: 6px;
+            background: var(--bg-card);
+            border-radius: 3px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-gold), var(--accent-green));
+            width: 0%;
+            transition: width 0.6s ease;
+        }
+
+        /* Trade Parameters Grid */
+        .trade-params {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .param-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .param-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .param-value {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        /* Reasoning Cards */
+        .analysis-details {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .reason-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .reason-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .reason-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .reason-item {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            line-height: 1.4;
+        }
+
+        .reason-item i {
+            color: var(--accent-green);
+            margin-top: 2px;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(10, 13, 20, 0.8);
+            backdrop-filter: blur(4px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            z-index: 20;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Notifications / Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--accent-blue);
+            color: var(--text-main);
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.88rem;
+            z-index: 100;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Bar -->
+    <header>
+        <div class="brand-logo">
+            <i class="fa-solid fa-chart-line-up"></i>
+            <span>AI CRYPTO TERMINAL <span style="font-size:0.75rem; font-weight:400; color:var(--text-dim);">PRO</span></span>
+        </div>
+
+        <!-- Live Tickers Row -->
+        <div class="ticker-bar" id="ticker_bar">
+            <div class="ticker-item active" onclick="selectPair('BTCUSDT')">
+                <span class="ticker-symbol">BTC/USDT</span>
+                <span class="ticker-price mono" id="tick_BTCUSDT">--.--</span>
+            </div>
+            <div class="ticker-item" onclick="selectPair('ETHUSDT')">
+                <span class="ticker-symbol">ETH/USDT</span>
+                <span class="ticker-price mono" id="tick_ETHUSDT">--.--</span>
+            </div>
+            <div class="ticker-item" onclick="selectPair('SOLUSDT')">
+                <span class="ticker-symbol">SOL/USDT</span>
+                <span class="ticker-price mono" id="tick_SOLUSDT">--.--</span>
+            </div>
+            <div class="ticker-item" onclick="selectPair('LTCUSDT')">
+                <span class="ticker-symbol">LTC/USDT</span>
+                <span class="ticker-price mono" id="tick_LTCUSDT">--.--</span>
+            </div>
+            <div class="ticker-item" onclick="selectPair('BNBUSDT')">
+                <span class="ticker-symbol">BNB/USDT</span>
+                <span class="ticker-price mono" id="tick_BNBUSDT">--.--</span>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <div class="status-badge">
+                <div class="pulse-dot"></div>
+                <span>BINANCE LIVE DATA</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main App Container -->
+    <div class="app-container">
+
+        <!-- Sidebar (Controls & Tools) -->
+        <div class="sidebar">
+            <div>
+                <div class="section-title"><i class="fa-solid fa-coins"></i> Выбор Актива</div>
+                <div class="form-group">
+                    <select id="coin_select" onchange="onPairChange()">
+                        <option value="BTCUSDT">BTC / USDT (Bitcoin)</option>
+                        <option value="ETHUSDT">ETH / USDT (Ethereum)</option>
+                        <option value="SOLUSDT">SOL / USDT (Solana)</option>
+                        <option value="LTCUSDT">LTC / USDT (Litecoin)</option>
+                        <option value="BNBUSDT">BNB / USDT (Binance Coin)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-title"><i class="fa-solid fa-paintbrush"></i> Инструменты Рисования</div>
+                <div class="drawing-tools">
+                    <button class="tool-btn active" id="tool_cursor" onclick="setTool('cursor')">
+                        <i class="fa-solid fa-arrow-pointer"></i> Курсор
+                    </button>
+                    <button class="tool-btn" id="tool_line" onclick="setTool('line')">
+                        <i class="fa-solid fa-slash"></i> Линия
+                    </button>
+                    <button class="tool-btn" id="tool_level" onclick="setTool('level')">
+                        <i class="fa-solid fa-grip-lines"></i> Уровень
+                    </button>
+                    <button class="tool-btn" id="tool_clear" onclick="clearDrawings()">
+                        <i class="fa-solid fa-trash-can"></i> Сброс
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-title"><i class="fa-solid fa-sliders"></i> Индикаторы На Графике</div>
+                <div class="indicator-list">
+                    <div class="toggle-item">
+                        <span>RSI (14)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="toggle_rsi" checked onchange="toggleIndicator('rsi')">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-item">
+                        <span>EMA (20 / 50 / 200)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="toggle_ema" checked onchange="toggleIndicator('ema')">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-item">
+                        <span>Объёмы (Volume)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="toggle_vol" checked onchange="toggleIndicator('vol')">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Analyze Trigger -->
+            <button class="btn-ai-analyze" onclick="runAiAnalysis()">
+                <i class="fa-solid fa-brain-circuit"></i>
+                <span>ИИ-АНАЛИЗ РЫНКА</span>
+            </button>
+        </div>
+
+        <!-- Center Workspace (Interactive Chart) -->
+        <div class="chart-workspace">
+            <div class="chart-header">
+                <div class="pair-info">
+                    <span class="pair-title" id="current_pair_title">BTC/USDT</span>
+                    <span class="mono" id="current_price_display" style="font-size: 1.1rem; font-weight:700;">$0.00</span>
+                    <span class="mono" id="price_change_display" style="font-size: 0.85rem; color: var(--accent-green);">+0.00%</span>
+                </div>
+
+                <div class="timeframe-picker">
+                    <button class="tf-btn" onclick="setTimeframe('1m')">1м</button>
+                    <button class="tf-btn" onclick="setTimeframe('5m')">5м</button>
+                    <button class="tf-btn" onclick="setTimeframe('15m')">15м</button>
+                    <button class="tf-btn active" onclick="setTimeframe('1h')">1ч</button>
+                    <button class="tf-btn" onclick="setTimeframe('4h')">4ч</button>
+                    <button class="tf-btn" onclick="setTimeframe('1d')">1Д</button>
+                </div>
+            </div>
+
+            <!-- Main Chart Area -->
+            <div class="chart-container">
+                <div id="tv_chart"></div>
+                <canvas id="drawing_overlay"></canvas>
+            </div>
+        </div>
+
+        <!-- Right Side Panel: AI Signal & Trade Execution -->
+        <div class="analysis-panel">
+            <div class="panel-header">
+                <span class="panel-title"><i class="fa-solid fa-robot" style="color:var(--accent-blue);"></i> AI Торговый Сигнал</span>
+                <span style="font-size:0.75rem; color:var(--text-muted);" id="analysis_timestamp">Обновлено: --:--</span>
+            </div>
+
+            <div class="signal-hero">
+                <div class="signal-badge-container">
+                    <div class="signal-type neutral" id="signal_badge">
+                        <i class="fa-solid fa-hourglass-start"></i> WAITING
+                    </div>
+
+                    <div class="confidence-meter">
+                        <span class="confidence-val mono" id="confidence_val">0%</span>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" id="confidence_fill"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trade Level Cards -->
+            <div class="trade-params">
+                <div class="param-card">
+                    <span class="param-label"><i class="fa-solid fa-crosshairs"></i> Вход (Entry)</span>
+                    <span class="param-value mono" id="val_entry" style="color: var(--text-main);">--.--</span>
+                </div>
+                <div class="param-card">
+                    <span class="param-label"><i class="fa-solid fa-shield-halved" style="color:var(--accent-red);"></i> Stop Loss</span>
+                    <span class="param-value mono" id="val_sl" style="color: var(--accent-red);">--.--</span>
+                </div>
+                <div class="param-card">
+                    <span class="param-label"><i class="fa-solid fa-bullseye" style="color:var(--accent-green);"></i> Take Profit 1</span>
+                    <span class="param-value mono" id="val_tp1" style="color: var(--accent-green);">--.--</span>
+                </div>
+                <div class="param-card">
+                    <span class="param-label"><i class="fa-solid fa-scale-balanced"></i> Risk / Reward</span>
+                    <span class="param-value mono" id="val_rr" style="color: var(--accent-gold);">1 : 2.5</span>
+                </div>
+            </div>
+
+            <!-- AI Reason Breakdown -->
+            <div class="analysis-details">
+                <div class="reason-box">
+                    <div class="reason-title"><i class="fa-solid fa-microchip"></i> Логика и факторы ИИ:</div>
+                    <ul class="reason-list" id="reason_list">
+                        <li class="reason-item"><i class="fa-solid fa-angle-right"></i> Нажмите "ИИ-Анализ рынка" для генерации свежего прогноза по активу.</li>
+                    </ul>
+                </div>
+
+                <div class="reason-box">
+                    <div class="reason-title"><i class="fa-solid fa-chart-pie"></i> Технический профиль</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted); display:flex; flex-direction:column; gap:6px;">
+                        <div style="display:flex; justify-size:space-between; justify-content:space-between;">
+                            <span>RSI Индекс:</span>
+                            <span class="mono" id="val_rsi_stat" style="color:var(--text-main);">--</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span>Тренд Structure:</span>
+                            <span id="val_structure_stat" style="color:var(--accent-green);">Bullish Market</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Loading Screen Overlay -->
+    <div class="loading-overlay" id="loading_overlay">
+        <div class="spinner"></div>
+        <div style="font-weight:700; font-size:1.1rem; color:var(--text-main);">ИИ анализирует свечные паттерны и ликвидность...</div>
+        <div style="font-size:0.85rem; color:var(--text-muted);">Обработка Master Prompt & Binance Data</div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast_notification">
+        <i class="fa-solid fa-circle-check" style="color:var(--accent-green); font-size:1.2rem;"></i>
+        <span id="toast_msg">Сигнал успешно получен!</span>
+    </div>
+
+    <script>
+        // App State
+        let currentSymbol = "BTCUSDT";
+        let currentInterval = "1h";
+        let activeTool = "cursor";
+        let chartInstance = null;
+        let candleSeries = null;
+        let volumeSeries = null;
+        let ema20Series = null;
+        let socket = null;
+
+        // Overlay Drawing Canvas State
+        const canvas = document.getElementById('drawing_overlay');
+        const ctx = canvas.getContext('2d');
+        let drawings = [];
+        let isDrawing = false;
+        let drawStart = { x: 0, y: 0 };
+
+        // Initialize Chart
+        function initChart() {
+            const chartContainer = document.getElementById('tv_chart');
+            
+            chartInstance = LightweightCharts.createChart(chartContainer, {
+                layout: {
+                    background: { color: '#0a0d14' },
+                    textColor: '#94a3b8',
+                    fontSize: 12,
+                    fontFamily: 'Inter, sans-serif',
+                },
+                grid: {
+                    vertLines: { color: '#182030' },
+                    horzLines: { color: '#182030' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                    vertLine: { color: '#3b82f6', width: 1, style: 2 },
+                    horzLine: { color: '#3b82f6', width: 1, style: 2 },
+                },
+                rightPriceScale: {
+                    borderColor: '#232f48',
+                },
+                timeScale: {
+                    borderColor: '#232f48',
+                    timeVisible: true,
+                    secondsVisible: false,
+                },
+            });
+
+            candleSeries = chartInstance.addCandlestickSeries({
+                upColor: '#00f090',
+                downColor: '#ff3860',
+                borderUpColor: '#00f090',
+                borderDownColor: '#ff3860',
+                wickUpColor: '#00f090',
+                wickDownColor: '#ff3860',
+            });
+
+            volumeSeries = chartInstance.addHistogramSeries({
+                color: '#26a69a',
+                priceFormat: { type: 'volume' },
+                priceScaleId: '',
+                scaleMargins: { top: 0.8, bottom: 0 },
+            });
+
+            ema20Series = chartInstance.addLineSeries({
+                color: '#3b82f6',
+                lineWidth: 2,
+            });
+
+            resizeCanvas();
+            window.addEventListener('resize', () => {
+                chartInstance.applyOptions({
+                    width: chartContainer.clientWidth,
+                    height: chartContainer.clientHeight
+                });
+                resizeCanvas();
+            });
+
+            loadCandleData();
+            initWebsockets();
+        }
+
+        // Fetch Live Candle Data
+        async function loadCandleData() {
+            try {
+                const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${currentSymbol}&interval=${currentInterval}&limit=250`);
+                const data = await response.json();
+
+                const candles = [];
+                const volumes = [];
+                const closes = [];
+
+                data.forEach(d => {
+                    const time = d[0] / 1000;
+                    const open = parseFloat(d[1]);
+                    const high = parseFloat(d[2]);
+                    const low = parseFloat(d[3]);
+                    const close = parseFloat(d[4]);
+                    const volume = parseFloat(d[5]);
+
+                    candles.push({ time, open, high, low, close });
+                    volumes.push({
+                        time,
+                        value: volume,
+                        color: close >= open ? 'rgba(0, 240, 144, 0.25)' : 'rgba(255, 56, 96, 0.25)'
+                    });
+                    closes.push(close);
+                });
+
+                candleSeries.setData(candles);
+                volumeSeries.setData(volumes);
+
+                // Simple EMA calculation for visual completeness
+                const emaData = calculateEMA(candles, 20);
+                ema20Series.setData(emaData);
+
+                // Update current price UI
+                if(candles.length > 0) {
+                    const lastPrice = candles[candles.length - 1].close;
+                    document.getElementById('current_price_display').innerText = '$' + lastPrice.toLocaleString();
+                }
+
+            } catch (err) {
+                console.error("Failed to fetch candle data", err);
+            }
+        }
+
+        function calculateEMA(candles, period) {
+            const k = 2 / (period + 1);
+            let emaPrev = candles[0].close;
+            const emaArray = [];
+
+            for (let i = 0; i < candles.length; i++) {
+                const close = candles[i].close;
+                emaPrev = i === 0 ? close : (close * k) + (emaPrev * (1 - k));
+                emaArray.push({ time: candles[i].time, value: emaPrev });
+            }
+            return emaArray;
+        }
+
+        // Websocket Stream for live prices
+        function initWebsockets() {
+            const tickers = ['btcusdt', 'ethusdt', 'solusdt', 'ltcusdt', 'bnbusdt'];
+            const streamUrl = `wss://stream.binance.com:9443/ws/${tickers.map(t => t + '@ticker').join('/')}`;
+
+            if(socket) socket.close();
+            socket = new WebSocket(streamUrl);
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const symbol = data.s;
+                const price = parseFloat(data.c).toFixed(2);
+                
+                const elem = document.getElementById(`tick_${symbol}`);
+                if(elem) elem.innerText = `$${price}`;
+
+                if(symbol === currentSymbol) {
+                    document.getElementById('current_price_display').innerText = `$${price}`;
+                }
+            };
+        }
+
+        // Handle Pair Switch
+        function selectPair(symbol) {
+            currentSymbol = symbol;
+            document.getElementById('coin_select').value = symbol;
+            document.getElementById('current_pair_title').innerText = symbol.replace('USDT', '/USDT');
+            
+            document.querySelectorAll('.ticker-item').forEach(el => el.classList.remove('active'));
+            loadCandleData();
+        }
+
+        function onPairChange() {
+            const val = document.getElementById('coin_select').value;
+            selectPair(val);
+        }
+
+        function setTimeframe(tf) {
+            currentInterval = tf;
+            document.querySelectorAll('.tf-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            loadCandleData();
+        }
+
+        // Drawing Controls & Overlay
+        function setTool(tool) {
+            activeTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tool_${tool}`).classList.add('active');
+
+            if(tool === 'cursor') {
+                canvas.classList.remove('interactive');
+            } else {
+                canvas.classList.add('interactive');
+            }
+        }
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            redrawCanvas();
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if(activeTool === 'cursor') return;
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            drawStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if(!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const currentPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+            redrawCanvas();
+            drawShape(drawStart, currentPos, activeTool);
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if(!isDrawing) return;
+            isDrawing = false;
+            const rect = canvas.getBoundingClientRect();
+            const endPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            
+            drawings.push({ start: drawStart, end: endPos, type: activeTool });
+            redrawCanvas();
+        });
+
+        function drawShape(start, end, type) {
+            ctx.strokeStyle = '#00f090';
+            ctx.lineWidth = 2;
+
+            if(type === 'line') {
+                ctx.beginPath();
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.stroke();
+            } else if(type === 'level') {
+                ctx.beginPath();
+                ctx.moveTo(0, start.y);
+                ctx.lineTo(canvas.width, start.y);
+                ctx.stroke();
+            }
+        }
+
+        function redrawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawings.forEach(d => drawShape(d.start, d.end, d.type));
+        }
+
+        function clearDrawings() {
+            drawings = [];
+            redrawCanvas();
+            showToast('Все рисунки удалены');
+        }
+
+        function toggleIndicator(ind) {
+            if(ind === 'vol') volumeSeries.applyOptions({ visible: document.getElementById('toggle_vol').checked });
+            if(ind === 'ema') ema20Series.applyOptions({ visible: document.getElementById('toggle_ema').checked });
+            showToast(`Индикатор ${ind.toUpperCase()} обновлен`);
+        }
+
+        // AI Trigger Function (Calls Python Backend)
+        async function runAiAnalysis() {
+            const loader = document.getElementById('loading_overlay');
+            loader.classList.add('active');
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol: currentSymbol, interval: currentInterval })
+                });
+
+                const data = await response.json();
+                
+                // Update UI with response
+                updateAiPanel(data);
+                showToast('Анализ успешно завершен!');
+            } catch (err) {
+                console.error("Error running AI analysis", err);
+                showToast('Ошибка обращения к API анализа');
+            } finally {
+                loader.classList.remove('active');
+            }
+        }
+
+        function updateAiPanel(data) {
+            const badge = document.getElementById('signal_badge');
+            badge.className = 'signal-type ' + (data.signal === 'LONG' ? 'long' : 'short');
+            badge.innerHTML = data.signal === 'LONG' ? `<i class="fa-solid fa-arrow-trend-up"></i> LONG` : `<i class="fa-solid fa-arrow-trend-down"></i> SHORT`;
+
+            document.getElementById('confidence_val').innerText = `${data.confidence || 78}%`;
+            document.getElementById('confidence_fill').style.width = `${data.confidence || 78}%`;
+
+            document.getElementById('val_entry').innerText = `$${data.entry}`;
+            document.getElementById('val_sl').innerText = `$${data.stop_loss}`;
+            document.getElementById('val_tp1').innerText = `$${data.take_profit ? data.take_profit[0] : '-'}`;
+
+            if(data.rsi) {
+                document.getElementById('val_rsi_stat').innerText = data.rsi;
+            }
+
+            const reasonList = document.getElementById('reason_list');
+            reasonList.innerHTML = '';
+            if(data.reason && Array.isArray(data.reason)) {
+                data.reason.forEach(r => {
+                    const li = document.createElement('li');
+                    li.className = 'reason-item';
+                    li.innerHTML = `<i class="fa-solid fa-check"></i> ${r}`;
+                    reasonList.appendChild(li);
+                });
+            }
+
+            const now = new Date();
+            document.getElementById('analysis_timestamp').innerText = `Обновлено: ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast_notification');
+            document.getElementById('toast_msg').innerText = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // Initialize on page load
+        window.onload = () => {
+            initChart();
+        };
+    </script>
+</body>
+</html>
