@@ -12,15 +12,11 @@
   --red-dim:rgba(255,0,0,0.15);
   --red-glow:rgba(255,0,0,0.4);
   --green:#00ff88;
-  --green-dim:rgba(0,255,136,0.12);
   --gold:#ffcc00;
-  --bg:#000;
-  --card:#0a0a0a;
   --border:rgba(255,0,0,0.2);
 }
 html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',monospace;overflow:hidden}
 
-/* HEADER */
 .header{
   display:flex;align-items:center;justify-content:center;
   padding:16px 20px 8px;gap:14px;flex-shrink:0;
@@ -44,24 +40,21 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
 }
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
-/* LAYOUT */
 .app{display:flex;flex-direction:column;height:100vh}
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
 
-/* STATUS BAR */
 .status-bar{
   padding:4px 14px;background:rgba(0,0,0,0.8);
   border-bottom:1px solid rgba(255,0,0,0.08);
   display:flex;align-items:center;gap:8px;
   font-size:0.6rem;color:#444;letter-spacing:1px;
 }
-.status-bar .model-tag{
+.model-tag{
   color:rgba(255,204,0,0.6);
   border:1px solid rgba(255,204,0,0.2);
   padding:1px 6px;border-radius:3px;
 }
 
-/* CHAT AREA */
 .chat-area{
   flex:1;overflow-y:auto;padding:12px 14px;
   display:flex;flex-direction:column;gap:10px;
@@ -70,7 +63,6 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
 .chat-area::-webkit-scrollbar{width:3px}
 .chat-area::-webkit-scrollbar-thumb{background:rgba(255,0,0,0.3);border-radius:2px}
 
-/* MESSAGES */
 .msg-row{display:flex;gap:8px;animation:fadeIn 0.3s ease}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .msg-row.user{flex-direction:row-reverse}
@@ -79,27 +71,23 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
   display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;
 }
 .avatar.ai{background:var(--red);color:#000;font-family:'Orbitron',sans-serif;font-size:0.5rem}
-.avatar.user{background:#1a1a1a;border:1px solid rgba(255,255,255,0.2);font-size:0.65rem}
+.avatar.user{background:#1a1a1a;border:1px solid rgba(255,255,255,0.2)}
 .bubble{
   max-width:82%;padding:10px 13px;border-radius:12px;
   font-size:0.78rem;line-height:1.5;
 }
 .bubble.ai{
-  background:#0d0d0d;border:1px solid var(--border);border-top-left-radius:4px;
-  color:#e0e0e0;
+  background:#0d0d0d;border:1px solid var(--border);
+  border-top-left-radius:4px;color:#e0e0e0;
 }
 .bubble.user{
   background:rgba(255,0,0,0.12);border:1px solid rgba(255,0,0,0.3);
   border-top-right-radius:4px;color:#fff;
 }
-
-/* ERROR BUBBLE */
 .bubble.error{
-  background:rgba(255,0,0,0.08);border:1px solid rgba(255,0,0,0.4);
-  color:#ff6666;
+  background:rgba(255,0,0,0.08);border:1px solid rgba(255,0,0,0.4);color:#ff6666;
 }
 
-/* SIGNAL CARD */
 .signal-card{
   margin-top:8px;border:1px solid currentColor;border-radius:8px;overflow:hidden;
 }
@@ -109,7 +97,6 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
 .sig-type{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:900;letter-spacing:2px}
 .sig-type.long{color:var(--green)}
 .sig-type.short{color:var(--red)}
-.sig-conf{font-size:0.65rem;color:var(--gold)}
 .sig-body{padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}
 .sig-row{display:flex;flex-direction:column;gap:2px}
 .sig-label{font-size:0.6rem;color:#666;letter-spacing:1px;text-transform:uppercase}
@@ -123,29 +110,34 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
 .sig-reasons ul li{font-size:0.72rem;color:#aaa;display:flex;gap:6px}
 .sig-reasons ul li::before{content:'▸';color:var(--red);flex-shrink:0}
 .sig-price-live{
-  padding:6px 12px;background:rgba(255,204,0,0.06);border-top:1px solid rgba(255,204,0,0.15);
+  padding:6px 12px;background:rgba(255,204,0,0.06);
+  border-top:1px solid rgba(255,204,0,0.15);
   font-size:0.7rem;color:var(--gold);display:flex;justify-content:space-between;
 }
 
-/* THINKING */
 .thinking{display:flex;gap:4px;align-items:center;padding:6px 0}
-.thinking span{width:5px;height:5px;border-radius:50%;background:var(--red);animation:think 1.2s infinite}
+.thinking span{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--red);animation:think 1.2s infinite;
+}
 .thinking span:nth-child(2){animation-delay:.2s}
 .thinking span:nth-child(3){animation-delay:.4s}
 @keyframes think{0%,60%,100%{transform:scale(1);opacity:.4}30%{transform:scale(1.4);opacity:1}}
 
-/* INPUT AREA */
 .input-zone{
   padding:10px 14px 14px;border-top:1px solid var(--border);
   background:rgba(0,0,0,0.9);flex-shrink:0;
 }
-.hint-chips{display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.hint-chips{
+  display:flex;gap:6px;margin-bottom:8px;
+  overflow-x:auto;padding-bottom:2px;scrollbar-width:none;
+}
 .hint-chips::-webkit-scrollbar{display:none}
 .chip{
   flex-shrink:0;padding:4px 10px;border-radius:20px;
   border:1px solid var(--border);background:var(--red-dim);
-  font-size:0.65rem;color:rgba(255,100,100,0.9);cursor:pointer;
-  transition:all .2s;white-space:nowrap;
+  font-size:0.65rem;color:rgba(255,100,100,0.9);
+  cursor:pointer;transition:all .2s;white-space:nowrap;
 }
 .chip:hover{background:rgba(255,0,0,0.25);border-color:rgba(255,0,0,0.5)}
 .input-row{display:flex;gap:8px;align-items:flex-end}
@@ -153,27 +145,29 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
   flex:1;background:#0d0d0d;border:1px solid var(--border);
   color:#fff;padding:10px 13px;border-radius:10px;
   font-family:'JetBrains Mono',monospace;font-size:0.8rem;
-  resize:none;outline:none;min-height:42px;max-height:100px;line-height:1.4;
-  transition:border-color .2s;
+  resize:none;outline:none;min-height:42px;max-height:100px;
+  line-height:1.4;transition:border-color .2s;
 }
-.msg-input:focus{border-color:rgba(255,0,0,0.5);box-shadow:0 0 0 2px rgba(255,0,0,0.08)}
+.msg-input:focus{
+  border-color:rgba(255,0,0,0.5);
+  box-shadow:0 0 0 2px rgba(255,0,0,0.08);
+}
 .msg-input::placeholder{color:#333}
 .send-btn{
   width:42px;height:42px;border-radius:10px;border:none;flex-shrink:0;
-  background:var(--red);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  background:var(--red);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
   transition:all .2s;font-size:1rem;
 }
 .send-btn:hover{background:#cc0000;box-shadow:0 0 12px var(--red-glow)}
 .send-btn:active{transform:scale(0.95)}
 .send-btn:disabled{opacity:.4;cursor:not-allowed}
 
-/* TOAST уведомление */
 .toast{
   position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
   background:#1a0000;border:1px solid rgba(255,0,0,0.4);color:#ff6666;
   padding:8px 16px;border-radius:8px;font-size:0.72rem;
-  opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;
-  white-space:nowrap;
+  opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap;
 }
 .toast.show{opacity:1}
 </style>
@@ -181,7 +175,7 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
 <body>
 <div class="app">
   <div class="header">
-    <svg class="eyes-svg" viewBox="0 0 88 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg class="eyes-svg" viewBox="0 0 88 30" fill="none">
       <ellipse cx="22" cy="16" rx="20" ry="12" fill="#ff0000" transform="rotate(-12 22 16)"/>
       <ellipse cx="66" cy="16" rx="20" ry="12" fill="#ff0000" transform="rotate(12 66 16)"/>
       <ellipse cx="22" cy="16" rx="12" ry="7" fill="#000" transform="rotate(-12 22 16)"/>
@@ -191,10 +185,9 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
     <div class="live-dot">LIVE</div>
   </div>
 
-  <!-- Строка статуса -->
   <div class="status-bar">
     <span>POWERED BY</span>
-    <span class="model-tag" id="modelTag">CLAUDE AI</span>
+    <span class="model-tag" id="modelTag">CLAUDE FABLE 5</span>
     <span style="margin-left:auto" id="statusText">Проверка соединения...</span>
   </div>
 
@@ -203,11 +196,11 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
       <div class="msg-row">
         <div class="avatar ai">NX</div>
         <div class="bubble ai">
-          Приветствую. Я — NEZZX AI на базе Claude.<br>
+          Приветствую. Я — NEZZX AI на базе Claude Fable 5.<br>
           Анализирую криптовалюты в реальном времени.<br><br>
           Задай вопрос по любому коину:<br>
           <span style="color:rgba(255,100,100,0.8)">«Дай сигнал на BTC лонг»</span><br>
-          <span style="color:rgba(255,100,100,0.8)">«Анализ ETH / шорт»</span><br>
+          <span style="color:rgba(255,100,100,0.8)">«Анализ ETH шорт»</span><br>
           <span style="color:rgba(255,100,100,0.8)">«Куда идёт SOL?»</span>
         </div>
       </div>
@@ -231,23 +224,16 @@ html,body{height:100%;background:#000;color:#fff;font-family:'JetBrains Mono',mo
           placeholder="Дай сигнал на коин... (напр. BTC лонг)"
           rows="1"
         ></textarea>
-        <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Отправить">▶</button>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">▶</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script>
-// ============================================================
-// КОНФИГУРАЦИЯ
-// Фронтенд общается только со СВОИМ бэкендом.
-// API-ключ Claude хранится на сервере — в переменных окружения.
-// ============================================================
-const API_BASE = '';  // Пустая строка = тот же origin (бэкенд отдаёт этот HTML)
-
+const API_BASE  = '';
 const chatArea  = document.getElementById('chatArea');
 const msgInput  = document.getElementById('msgInput');
 const sendBtn   = document.getElementById('sendBtn');
@@ -255,18 +241,16 @@ const statusTxt = document.getElementById('statusText');
 const modelTag  = document.getElementById('modelTag');
 let isLoading   = false;
 
-// ============================================================
-// ИНИЦИАЛИЗАЦИЯ — ПРОВЕРКА ЗДОРОВЬЯ БЭКЕНДА
-// ============================================================
+// HEALTH CHECK
 async function checkHealth() {
   try {
     const r = await fetch(`${API_BASE}/api/health`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
-    statusTxt.textContent = d.anthropic_key_set ? 'Готов к работе ✓' : '⚠ API ключ не найден';
-    statusTxt.style.color = d.anthropic_key_set ? '#00ff88' : '#ff6666';
-    if (d.claude_model) {
-      modelTag.textContent = d.claude_model.toUpperCase().replace('CLAUDE-','CLAUDE ');
+    statusTxt.textContent = d.api_key_set ? 'Готов к работе ✓' : '⚠ API ключ не найден';
+    statusTxt.style.color = d.api_key_set ? '#00ff88' : '#ff6666';
+    if (d.model) {
+      modelTag.textContent = d.model.toUpperCase();
     }
   } catch(e) {
     statusTxt.textContent = '⚠ Бэкенд недоступен';
@@ -275,9 +259,7 @@ async function checkHealth() {
 }
 checkHealth();
 
-// ============================================================
 // TOAST
-// ============================================================
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -285,9 +267,7 @@ function showToast(msg, duration = 3000) {
   setTimeout(() => t.classList.remove('show'), duration);
 }
 
-// ============================================================
-// HELPERS
-// ============================================================
+// INPUT HELPERS
 msgInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
@@ -295,35 +275,26 @@ msgInput.addEventListener('input', () => {
   msgInput.style.height = 'auto';
   msgInput.style.height = Math.min(msgInput.scrollHeight, 100) + 'px';
 });
-
 function setInput(text) { msgInput.value = text; msgInput.focus(); }
-
 function esc(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
 }
-
 function scrollDown() { chatArea.scrollTop = chatArea.scrollHeight; }
 
-// ============================================================
-// ДОБАВИТЬ СООБЩЕНИЕ
-// ============================================================
+// ADD MESSAGE
 function addMsg(role, content, extraClass = '') {
   const row = document.createElement('div');
   row.className = 'msg-row ' + role;
-
   const av = document.createElement('div');
   av.className = 'avatar ' + role;
   av.textContent = role === 'ai' ? 'NX' : '👤';
-
   const bubble = document.createElement('div');
   bubble.className = `bubble ${role}${extraClass ? ' ' + extraClass : ''}`;
-
-  if (typeof content === 'string') {
-    bubble.innerHTML = content;
-  } else {
-    bubble.appendChild(content);
-  }
-
+  if (typeof content === 'string') bubble.innerHTML = content;
+  else bubble.appendChild(content);
   row.appendChild(av);
   row.appendChild(bubble);
   chatArea.appendChild(row);
@@ -331,72 +302,59 @@ function addMsg(role, content, extraClass = '') {
   return bubble;
 }
 
-// ============================================================
-// ИНДИКАТОР "ДУМАЮ..."
-// ============================================================
+// THINKING
 function showThinking() {
   const row = document.createElement('div');
   row.className = 'msg-row';
   row.id = 'thinking_row';
-
   const av = document.createElement('div');
   av.className = 'avatar ai';
   av.textContent = 'NX';
-
   const bubble = document.createElement('div');
   bubble.className = 'bubble ai';
   bubble.innerHTML = '<div class="thinking"><span></span><span></span><span></span></div>';
-
   row.appendChild(av);
   row.appendChild(bubble);
   chatArea.appendChild(row);
   scrollDown();
 }
-
 function removeThinking() {
   const el = document.getElementById('thinking_row');
   if (el) el.remove();
 }
 
-// ============================================================
-// ПОСТРОИТЬ КАРТОЧКУ СИГНАЛА
-// ============================================================
+// SIGNAL CARD
 function buildSignalCard(data) {
   const isLong  = data.direction === 'LONG';
   const color   = isLong ? 'var(--green)' : 'var(--red)';
   const bgColor = isLong ? 'rgba(0,255,136,0.06)' : 'rgba(255,0,0,0.06)';
   const dirTxt  = isLong ? '▲ LONG' : '▼ SHORT';
+  const conf    = Math.min(Math.max(Number(data.confidence) || 70, 60), 92);
+
+  const tp2 = data.take_profit_2
+    ? `<div class="sig-row"><span class="sig-label">TP 2</span><span class="sig-val tp">$${esc(data.take_profit_2)}</span></div>` : '';
+  const tp3 = data.take_profit_3
+    ? `<div class="sig-row"><span class="sig-label">TP 3</span><span class="sig-val tp">$${esc(data.take_profit_3)}</span></div>` : '';
+  const reasons = data.reasons && data.reasons.length
+    ? `<div class="sig-reasons">
+         <p>Обоснование</p>
+         <ul>${data.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+       </div>` : '';
+  const summary = data.summary
+    ? `<div style="padding:8px 12px;border-top:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:#777;line-height:1.5">${esc(data.summary)}</div>` : '';
 
   const card = document.createElement('div');
   card.className = 'signal-card';
   card.style.borderColor = color;
-
-  const conf    = Math.min(Math.max(data.confidence || 70, 60), 92);
-  const tp2html = data.take_profit_2
-    ? `<div class="sig-row"><span class="sig-label">TP 2</span><span class="sig-val tp">$${data.take_profit_2}</span></div>`
-    : '';
-  const tp3html = data.take_profit_3
-    ? `<div class="sig-row"><span class="sig-label">TP 3</span><span class="sig-val tp">$${data.take_profit_3}</span></div>`
-    : '';
-  const reasonsHtml = data.reasons && data.reasons.length
-    ? `<div class="sig-reasons">
-         <p>Обоснование</p>
-         <ul>${data.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
-       </div>`
-    : '';
-  const summaryHtml = data.summary
-    ? `<div style="padding:8px 12px;border-top:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:#777;line-height:1.5">${esc(data.summary)}</div>`
-    : '';
-
   card.innerHTML = `
     <div class="sig-header" style="background:${bgColor}">
       <div>
         <div style="font-size:0.65rem;color:#555;letter-spacing:1px;margin-bottom:2px">
-          ${esc(data.pair || (data.coin + '/USDT'))} · ${esc(data.timeframe || '4H')}
+          ${esc(data.pair || data.coin + '/USDT')} · ${esc(data.timeframe || '4H')}
         </div>
         <div class="sig-type ${isLong ? 'long' : 'short'}">${dirTxt}</div>
       </div>
-      <div class="sig-conf">
+      <div>
         <div style="font-size:0.6rem;color:#555;text-align:right;margin-bottom:3px">УВЕРЕННОСТЬ</div>
         <div style="font-size:1.1rem;font-weight:700;color:var(--gold);text-align:right">${conf}%</div>
         <div style="width:80px;height:4px;background:#111;border-radius:2px;margin-top:4px">
@@ -405,40 +363,35 @@ function buildSignalCard(data) {
       </div>
     </div>
     <div class="sig-body">
-      <div class="sig-row"><span class="sig-label">Вход</span><span class="sig-val entry">$${esc(String(data.entry))}</span></div>
-      <div class="sig-row"><span class="sig-label">Стоп-лосс</span><span class="sig-val sl">$${esc(String(data.stop_loss))}</span></div>
-      <div class="sig-row"><span class="sig-label">TP 1</span><span class="sig-val tp">$${esc(String(data.take_profit_1))}</span></div>
-      ${tp2html}
-      ${tp3html}
-      <div class="sig-row"><span class="sig-label">RSI</span><span class="sig-val" style="color:#aaa">${esc(String(data.rsi || '—'))}</span></div>
+      <div class="sig-row"><span class="sig-label">Вход</span><span class="sig-val entry">$${esc(data.entry)}</span></div>
+      <div class="sig-row"><span class="sig-label">Стоп-лосс</span><span class="sig-val sl">$${esc(data.stop_loss)}</span></div>
+      <div class="sig-row"><span class="sig-label">TP 1</span><span class="sig-val tp">$${esc(data.take_profit_1)}</span></div>
+      ${tp2}${tp3}
+      <div class="sig-row"><span class="sig-label">RSI</span><span class="sig-val" style="color:#aaa">${esc(data.rsi || '—')}</span></div>
     </div>
-    ${reasonsHtml}
-    ${summaryHtml}
+    ${reasons}
+    ${summary}
     <div class="sig-price-live">
       <span>ТЕКУЩАЯ ЦЕНА</span>
-      <span>$${esc(String(data.current_price || '—'))}</span>
+      <span>$${esc(data.current_price || '—')}</span>
     </div>
   `;
   return card;
 }
 
-// ============================================================
-// ОТПРАВИТЬ СООБЩЕНИЕ
-// ============================================================
+// SEND MESSAGE
 async function sendMessage() {
   const text = msgInput.value.trim();
   if (!text || isLoading) return;
 
   isLoading = true;
   sendBtn.disabled = true;
-
   addMsg('user', esc(text));
   msgInput.value = '';
   msgInput.style.height = 'auto';
   showThinking();
 
   try {
-    // Запрос к нашему бэкенду (не напрямую к Anthropic!)
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -449,7 +402,7 @@ async function sendMessage() {
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      const errMsg = errData.detail || `Ошибка сервера: HTTP ${res.status}`;
+      const errMsg  = errData.detail || `Ошибка сервера: HTTP ${res.status}`;
       addMsg('ai', `⚠️ ${esc(errMsg)}`, 'error');
       showToast(errMsg);
       return;
@@ -458,36 +411,34 @@ async function sendMessage() {
     const data = await res.json();
     const raw  = data.response || '';
 
-    // Пробуем распарсить JSON от Claude
+    // Парсим JSON ответ от Claude
     let parsed = null;
     try {
-      // Убираем возможные markdown-обёртки ```json ... ```
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+      const cleaned = raw
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```\s*$/, '')
+        .trim();
       parsed = JSON.parse(cleaned);
-    } catch (e) {
-      // Claude ответил не JSON-ом — показываем как текст
+    } catch(e) {
       parsed = { type: 'text', message: raw };
     }
 
     if (parsed && parsed.type === 'signal') {
-      // Строим карточку сигнала
       const wrap = document.createElement('div');
-      const ts = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      const ts   = new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
       wrap.innerHTML = `<div style="margin-bottom:8px;font-size:0.72rem;color:#555">Анализ завершён · ${ts}</div>`;
       wrap.appendChild(buildSignalCard(parsed));
       addMsg('ai', wrap);
     } else {
-      // Обычный текстовый ответ
       const msg = (parsed && parsed.message) || raw || 'Пустой ответ от сервера.';
       addMsg('ai', esc(msg).replace(/\n/g, '<br>'));
     }
 
-  } catch (e) {
+  } catch(e) {
     removeThinking();
-    const errMsg = 'Ошибка соединения с сервером. Проверьте, что бэкенд запущен.';
-    addMsg('ai', `⚠️ ${errMsg}`, 'error');
-    showToast(errMsg);
-    console.error('sendMessage error:', e);
+    addMsg('ai', '⚠️ Ошибка соединения с сервером.', 'error');
+    showToast('Ошибка соединения');
+    console.error(e);
   }
 
   isLoading = false;
@@ -496,4 +447,4 @@ async function sendMessage() {
 }
 </script>
 </body>
-              </html>
+  </html>
