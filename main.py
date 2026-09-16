@@ -2,18 +2,18 @@ import os
 import sys
 import time
 import logging
-from typing import Optional, Dict, Any
+import httpx
+from typing import Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, Status
+from fastapi import FastAPI, HTTPException, Request
+from starlette import status as Status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, validator
-import google.generativeai as genai
-from google.generativeai.types import RequestOptions
 
 # ==============================================================================
-# ЛОГИРОВАНИЕ И КОНФИГУРАЦИЯ СЕРВЕРА
+# ЛОГИРОВАНИЕ
 # ==============================================================================
 
 logging.basicConfig(
@@ -21,70 +21,122 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)]
 )
-logger = logging.getLogger("TradingAI")
+logger = logging.getLogger("NezzxSignals")
 
-# Инициализация API ключа Gemini
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    logger.info("Gemini API успешно конфигурирован.")
+# ==============================================================================
+# КОНФИГУРАЦИЯ
+# ==============================================================================
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+CLAUDE_MODEL      = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5")  # можно менять через env
+
+if ANTHROPIC_API_KEY:
+    logger.info("Anthropic API key загружен успешно.")
 else:
-    logger.warning("ВНИМАНИЕ: GEMINI_API_KEY не найден в переменных окружения!")
-
-# ==============================================================================
-# ДИНАМИЧЕСКАЯ ЗАГРУЗКА МАСТЕР-ПРОМПТА ИЗ ФАЙЛА
-# ==============================================================================
+    logger.warning("ANTHROPIC_API_KEY не найден в переменных окружения!")
 
 DEFAULT_PROMPT_FILENAME = "master_prompt.txt"
 
+# ==============================================================================
+# ЗАГРУЗКА СИСТЕМНОГО ПРОМПТА
+# ==============================================================================
+
 def load_system_prompt() -> str:
     """
-    Загружает системный промпт из файла master_prompt.txt или переменной окружения SYSTEM_PROMPT.
-    Если файл не найден, используется базовый аварийный промпт.
+    Приоритет:
+    1. Переменная окружения SYSTEM_PROMPT
+    2. Файл master_prompt.txt рядом с main.py
+    3. Встроенный резервный промпт
     """
-    # 1. Проверяем переменную окружения
-    env_prompt = os.getenv("SYSTEM_PROMPT")
-    if env_prompt and env_prompt.strip():
-        logger.info("Системный промпт успешно загружен из переменной окружения SYSTEM_PROMPT.")
-        return env_prompt.strip()
+    env_prompt = os.getenv("SYSTEM_PROMPT", "").strip()
+    if env_prompt:
+        logger.info("Системный промпт загружен из env SYSTEM_PROMPT.")
+        return env_prompt
 
-    # 2. Проверяем файл master_prompt.txt в директории
-    prompt_file_path = os.path.join(os.path.dirname(__file__), DEFAULT_PROMPT_FILENAME)
-    if os.path.exists(prompt_file_path):
+    prompt_path = os.path.join(os.path.dirname(__file__), DEFAULT_PROMPT_FILENAME)
+    if os.path.exists(prompt_path):
         try:
-            with open(prompt_file_path, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-                if content:
-                    logger.info(f"Системный промпт успешно загружен из файла {DEFAULT_PROMPT_FILENAME}.")
-                    return content
+            content = open(prompt_path, encoding="utf-8").read().strip()
+            if content:
+                logger.info(f"Системный промпт загружен из {DEFAULT_PROMPT_FILENAME}.")
+                return content
         except Exception as e:
-            logger.error(f"Ошибка при чтении {DEFAULT_PROMPT_FILENAME}: {str(e)}")
+            logger.error(f"Ошибка чтения {DEFAULT_PROMPT_FILENAME}: {e}")
 
-    # 3. Резервный фолбэк промпт
-    logger.warning(f"Файл {DEFAULT_PROMPT_FILENAME} не найден. Используется резервный промпт.")
-    return """
-    Ты — профессиональный ИИ-аналитик и наставник по фьючерсной торговле криптовалютами.
-    Проводи глубокий технический анализ (HTF/LTF, S/R, Order Blocks, FVG, Volume Profile, Wyckoff).
-    Всегда давай четкий план сделки: Вход, Стоп-лосс, Тейк-профиты (1-3), Risk/Reward и условия отмены сценария.
-    Не давай финансовых гарантий и всегда предупреждай о рисках торговли с плечом.
-    """
+    logger.warning("Используется встроенный резервный промпт.")
+    return """Ты — профессиональный трейдинговый ИИ-аналитик NEZZX SIGNALS.
+Специализируешься на криптовалютных сигналах и техническом анализе.
+
+ВАЖНО: Отвечай ТОЛЬКО в формате JSON. Никакого текста до или после JSON.
+
+Когда пользователь просит сигнал или анализ по коину:
+{
+  "type": "signal",
+  "coin": "BTC",
+  "pair": "BTC/USDT",
+  "direction": "LONG",
+  "timeframe": "4H",
+  "entry": "67200",
+  "stop_loss": "65800",
+  "take_profit_1": "69500",
+  "take_profit_2": "72000",
+  "take_profit_3": "75000",
+  "confidence": 78,
+  "current_price": "67450",
+  "rsi": "52",
+  "trend": "бычий",
+  "reasons": [
+    "EMA 20 выше EMA 50 — бычье пересечение",
+    "RSI 52 — нейтрально, без перекупленности",
+    "Поддержка на $66 800 держит уровень",
+    "Объём растёт на зелёных свечах",
+    "Паттерн бычьего флага на 4H"
+  ],
+  "summary": "Краткое объяснение почему именно этот сигнал"
+}
+
+Если вопрос общий (не о сигнале):
+{
+  "type": "text",
+  "message": "Твой ответ здесь по-русски"
+}
+
+ПРАВИЛА:
+- direction только LONG или SHORT
+- confidence от 60 до 92 (реалистично)
+- Используй реалистичные цены для монеты
+- reasons: 4-5 конкретных технических причин по-русски
+- Все цифры без знака $ в полях entry/stop_loss/take_profit
+- Отвечай по-русски
+- Только чистый JSON, без обёртки"""
 
 # ==============================================================================
-# PYDANTIC МОДЕЛИ ЗАПРОСОВ И ОТВЕТОВ
+# PYDANTIC МОДЕЛИ
 # ==============================================================================
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+
+    @validator("message")
+    def strip_message(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("Сообщение не может быть пустым")
+        return v
 
 class AnalysisRequest(BaseModel):
-    symbol: str = Field(..., example="BINANCE:BTCUSDT", description="Торговая пара или тикер")
-    timeframe: str = Field("1h", example="1h", description="Таймфрейм для анализа (15m, 1h, 4h, 1d)")
-    current_price: Optional[float] = Field(None, example=65000.50, description="Текущая цена инструмента")
-    notes: Optional[str] = Field("", example="Найди FVG и ближайший Order Block", description="Дополнительный контекст от пользователя")
-    mode: Optional[str] = Field("full", example="full", description="Режим ответа: full (полный) или short (краткий)")
+    symbol: str = Field(..., example="BTCUSDT")
+    timeframe: str = Field("4h", example="4h")
+    current_price: Optional[float] = Field(None, example=65000.0)
+    notes: Optional[str] = Field("", example="Найди FVG и ближайший Order Block")
+    mode: Optional[str] = Field("full", example="full")
 
-    @validator('symbol')
+    @validator("symbol")
     def sanitize_symbol(cls, v):
         v = v.strip().upper()
         if not v:
-            raise ValueError("Символ пары не может быть пустым")
+            raise ValueError("Символ не может быть пустым")
         return v
 
 class DealEvaluationRequest(BaseModel):
@@ -105,23 +157,23 @@ class StandardResponse(BaseModel):
     timestamp: float
 
 # ==============================================================================
-# ЖИЗНЕННЫЙ ЦИКЛ ПРИЛОЖЕНИЯ FASTAPI
+# ЖИЗНЕННЫЙ ЦИКЛ
 # ==============================================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Trading AI Analytics Server запускается...")
+    logger.info("NEZZX Signals Server запускается...")
+    logger.info(f"Модель Claude: {CLAUDE_MODEL}")
     yield
-    logger.info("Trading AI Analytics Server останавливается...")
+    logger.info("NEZZX Signals Server останавливается...")
 
 app = FastAPI(
-    title="Trading AI Analytics Platform Engine",
-    description="Backend на FastAPI для взаимодействия с Gemini API и отдачи веб-интерфейса",
-    version="2.1.0",
+    title="NEZZX Signals — Trading AI Backend",
+    description="FastAPI backend + Claude Anthropic API для криптосигналов",
+    version="3.0.0",
     lifespan=lifespan
 )
 
-# Разрешаем CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -132,49 +184,88 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
-    start_time = time.time()
+    start = time.time()
     response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
+    response.headers["X-Process-Time"] = f"{time.time() - start:.3f}s"
     return response
 
 # ==============================================================================
-# ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ОБРАЩЕНИЯ К GEMINI API
+# ЯДРО: ЗАПРОС К CLAUDE API
 # ==============================================================================
 
-def query_gemini(prompt: str) -> str:
-    if not GEMINI_API_KEY:
+async def query_claude(
+    user_message: str,
+    system_prompt: Optional[str] = None,
+    max_tokens: int = 1500,
+    temperature: float = 0.7
+) -> str:
+    """
+    Асинхронный запрос к Anthropic Claude API через httpx.
+    Возвращает текст ответа или бросает HTTPException.
+    """
+    if not ANTHROPIC_API_KEY:
         raise HTTPException(
             status_code=Status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="GEMINI_API_KEY не установлен в Environment Variables на Render."
+            detail="ANTHROPIC_API_KEY не установлен в Environment Variables на Render."
         )
 
-    system_instruction = load_system_prompt()
-    models_to_try = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"]
-    last_error = None
+    system = system_prompt or load_system_prompt()
 
-    for model_name in models_to_try:
-        try:
-            logger.info(f"Запрос к Gemini через модель: {model_name}")
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction=system_instruction
-            )
-            response = model.generate_content(
-                prompt,
-                request_options=RequestOptions(timeout=60.0)
-            )
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            logger.warning(f"Ошибка модели {model_name}: {str(e)}")
-            last_error = e
-            continue
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+    }
 
-    raise HTTPException(
-        status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=f"Не удалось получить ответ от Gemini API: {str(last_error)}"
-    )
+    payload = {
+        "model": CLAUDE_MODEL,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [
+            {"role": "user", "content": user_message}
+        ]
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            logger.info(f"Запрос к Claude ({CLAUDE_MODEL}), токены: {max_tokens}")
+            resp = await client.post(ANTHROPIC_API_URL, headers=headers, json=payload)
+
+            if resp.status_code != 200:
+                err_body = resp.text
+                logger.error(f"Claude API вернул {resp.status_code}: {err_body}")
+                raise HTTPException(
+                    status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Claude API ошибка {resp.status_code}: {err_body[:200]}"
+                )
+
+            data = resp.json()
+            text = "".join(
+                block.get("text", "")
+                for block in data.get("content", [])
+                if block.get("type") == "text"
+            )
+            if not text:
+                raise HTTPException(
+                    status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Claude вернул пустой ответ."
+                )
+
+            logger.info(f"Claude ответил успешно. Длина: {len(text)} символов.")
+            return text
+
+    except httpx.TimeoutException:
+        logger.error("Таймаут запроса к Claude API (90s).")
+        raise HTTPException(
+            status_code=Status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Превышено время ожидания ответа от Claude API."
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Ошибка сети при запросе к Claude: {e}")
+        raise HTTPException(
+            status_code=Status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Сетевая ошибка: {str(e)}"
+        )
 
 # ==============================================================================
 # ЭНДПОИНТЫ
@@ -182,17 +273,22 @@ def query_gemini(prompt: str) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
+    """Отдаёт index.html если он есть рядом с main.py"""
     index_path = os.path.join(os.path.dirname(__file__), "index.html")
     if os.path.exists(index_path):
-        with open(index_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read(), status_code=200)
+        return HTMLResponse(
+            content=open(index_path, encoding="utf-8").read(),
+            status_code=200
+        )
     return HTMLResponse(
         content="""
         <html>
-            <body style="font-family: sans-serif; background: #0b0e14; color: #e2e8f0; padding: 20px;">
-                <h2>🚀 Trading AI Server is Running</h2>
-                <p>Файл <code>index.html</code> не найден в корне проекта.</p>
-            </body>
+        <body style="font-family:monospace;background:#000;color:#e0e0e0;padding:30px">
+          <h2 style="color:#ff0000">🔴 NEZZX SIGNALS — Server Running</h2>
+          <p>Файл <code>index.html</code> не найден.</p>
+          <p>Положи его рядом с <code>main.py</code>.</p>
+          <p><a href="/docs" style="color:#ff6666">→ API Документация</a></p>
+        </body>
         </html>
         """,
         status_code=200
@@ -200,88 +296,113 @@ async def serve_frontend():
 
 @app.get("/api/health")
 async def health_check():
-    prompt_loaded = bool(load_system_prompt())
+    """Проверка состояния сервера"""
     return {
         "status": "healthy",
-        "gemini_key_set": bool(GEMINI_API_KEY),
-        "prompt_file_active": prompt_loaded,
+        "anthropic_key_set": bool(ANTHROPIC_API_KEY),
+        "claude_model": CLAUDE_MODEL,
+        "prompt_loaded": bool(load_system_prompt()),
+        "timestamp": time.time()
+    }
+
+@app.post("/api/chat")
+async def chat_endpoint(data: ChatRequest):
+    """
+    Основной чат-эндпоинт для фронтенда.
+    Возвращает сырой текст Claude (JSON или текст).
+    """
+    raw_response = await query_claude(
+        user_message=data.message,
+        max_tokens=1200,
+        temperature=0.7
+    )
+    return {
+        "status": "success",
+        "response": raw_response,
         "timestamp": time.time()
     }
 
 @app.post("/api/analyze", response_model=StandardResponse)
 async def analyze_market(data: AnalysisRequest):
+    """Детальный технический анализ по символу"""
     prompt = f"Проведи технический и стратегический анализ фьючерсной пары {data.symbol}."
     prompt += f"\n- Таймфрейм: {data.timeframe}"
     if data.current_price:
         prompt += f"\n- Текущая цена: ${data.current_price}"
     if data.notes:
-        prompt += f"\n- Вопросы и пожелания пользователя: {data.notes}"
-
+        prompt += f"\n- Вопросы пользователя: {data.notes}"
     if data.mode == "short":
-        prompt += "\n\nПредоставь ответ строго по краткому шаблону."
+        prompt += "\n\nОтвечай кратко, по сигнальному шаблону."
 
-    analysis_result = query_gemini(prompt)
-
+    result = await query_claude(prompt, max_tokens=1500)
     return StandardResponse(
         status="success",
         symbol=data.symbol,
-        analysis=analysis_result,
+        analysis=result,
         timestamp=time.time()
     )
 
 @app.post("/api/evaluate-deal", response_model=StandardResponse)
 async def evaluate_deal(data: DealEvaluationRequest):
-    risk = abs(data.entry_price - data.stop_loss)
+    """Оценка сделки пользователя"""
+    risk   = abs(data.entry_price - data.stop_loss)
     reward = abs(data.take_profit - data.entry_price)
-    rr_ratio = round(reward / risk, 2) if risk > 0 else 0
+    rr     = round(reward / risk, 2) if risk > 0 else 0
 
-    prompt = f"""
-Оцени торговую сделку пользователя:
+    prompt = f"""Оцени торговую сделку:
 - Инструмент: {data.symbol} ({data.direction})
-- Вход: {data.entry_price} | Стоп: {data.stop_loss} | Тейк: {data.take_profit} (R:R 1:{rr_ratio})
-- Логика пользователя: {data.rationale}
+- Вход: {data.entry_price} | Стоп: {data.stop_loss} | Тейк: {data.take_profit}
+- Risk/Reward: 1:{rr}
+- Логика трейдера: {data.rationale}
 
-Дай разбор: что сделано правильно, слабые места и конкретные рекомендации.
-"""
-    analysis_result = query_gemini(prompt)
+Дай разбор: что правильно, слабые места, конкретные рекомендации."""
 
+    result = await query_claude(prompt, max_tokens=1000)
     return StandardResponse(
         status="success",
         symbol=data.symbol,
-        analysis=analysis_result,
+        analysis=result,
         timestamp=time.time()
     )
 
 @app.post("/api/explain-term", response_model=StandardResponse)
 async def explain_term(data: TermExplanationRequest):
-    prompt = f"Объясни термин '{data.term}': определение, аналогию из жизни, вид на графике и применение в торговле."
-    analysis_result = query_gemini(prompt)
-
+    """Объяснение торгового термина"""
+    prompt = (
+        f"Объясни термин '{data.term}': "
+        f"определение, аналогию из жизни, как выглядит на графике, "
+        f"как применять в торговле."
+    )
+    result = await query_claude(prompt, max_tokens=800)
     return StandardResponse(
         status="success",
         symbol=data.term,
-        analysis=analysis_result,
+        analysis=result,
         timestamp=time.time()
     )
 
 # ==============================================================================
-# ОБРАБОТКА ИСКЛЮЧЕНИЙ
+# ОБРАБОТЧИКИ ОШИБОК
 # ==============================================================================
 
 @app.exception_handler(HTTPException)
-async def custom_http_exception_handler(request: Request, exc: HTTPException):
+async def http_exc_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"status": "error", "detail": exc.detail, "timestamp": time.time()}
     )
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Системная ошибка: {str(exc)}", exc_info=True)
+async def global_exc_handler(request: Request, exc: Exception):
+    logger.error(f"Необработанная ошибка: {exc}", exc_info=True)
     return JSONResponse(
-        status_code=Status.HTTP_500_INTERNAL_SERVER_ERROR,
+        status_code=500,
         content={"status": "error", "detail": "Внутренняя ошибка сервера.", "timestamp": time.time()}
     )
+
+# ==============================================================================
+# ЗАПУСК
+# ==============================================================================
 
 if __name__ == "__main__":
     import uvicorn
